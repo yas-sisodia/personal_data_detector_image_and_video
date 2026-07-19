@@ -11,3 +11,7 @@ __pycache__/
 
 .venv/
 venv/
+
+yolov8l-oiv7.pt
+yolov8x-oiv7.pt
+yolov9c.pt

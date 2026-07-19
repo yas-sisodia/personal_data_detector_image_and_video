@@ -7,7 +7,7 @@ from huggingface_hub import login
 from backend.core.model_manager import load_all_models
 import time
 
-token="YOUR_HF_ACCESS_TOKEN"
+token="hf_token"
 
 def check_tesseract():
     """Check if Tesseract is installed."""
