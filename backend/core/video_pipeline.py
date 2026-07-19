@@ -8,6 +8,7 @@ import numpy as np
 import tempfile
 from PIL import Image
 from skimage.metrics import structural_similarity as ssim
+import asyncio
 
 from backend.core.shared import (
     convert_text_segments,
@@ -125,36 +126,6 @@ def build_collage(frames, output_path, num_frames=6):
     return output_path
 
 
-# def build_collage(frames, output_path, num_frames=6):
-#     # Calculate the interval (step size) to select frames evenly spaced
-#     total_frames = len(frames)
-#     step_size = total_frames // num_frames
-
-#     # Select evenly spaced frames
-#     idxs = [i * step_size for i in range(num_frames)]
-    
-#     # Ensure that the last index doesn't exceed the total number of frames
-#     idxs[-1] = min(idxs[-1], total_frames - 1)
-    
-#     # Read and resize the selected frames
-#     imgs = [cv2.resize(cv2.imread(frames[i]), (320, 180)) for i in idxs]
-
-#     # If there are fewer than `num_frames` selected, duplicate the last frame
-#     while len(imgs) < num_frames:
-#         imgs.append(imgs[-1])
-
-#     # Create a collage: stack the images horizontally (3 images per row)
-#     collage = np.vstack([
-#         np.hstack(imgs[:3]),  # First row of 3 frames
-#         np.hstack(imgs[3:6])  # Second row of 3 frames
-#     ])
-
-#     # Save the collage image
-#     cv2.imwrite(output_path, collage)
-#     return output_path
-
-
-# =========================================================
 # 
 # =========================================================
 import base64
@@ -232,13 +203,23 @@ async def run_video_pipeline(video_path, progress_cb=None, enable_caption=False)
         # Extract keyframes
         # -----------------------------------
         await emit("Extracting keyframes", 10, data)
-        keyframes = extract_keyframes(video_path, tmp)
+        # keyframes = extract_keyframes(video_path, tmp)
+        keyframes = await asyncio.to_thread(
+    extract_keyframes,
+    video_path,
+    tmp,
+)
 
         # -----------------------------------
         # Build collage
         # -----------------------------------
         await emit("Building context collage", 25, data)
-        collage_path = build_collage(keyframes, os.path.join(tmp, "context.jpg"))
+        # collage_path = build_collage(keyframes, os.path.join(tmp, "context.jpg"))/
+        collage_path = await asyncio.to_thread(
+    build_collage,
+    keyframes,
+    os.path.join(tmp, "context.jpg"),
+)
         collage_base64 = image_to_base64(collage_path)
         data["caption_image"] = collage_base64
 
@@ -246,16 +227,24 @@ async def run_video_pipeline(video_path, progress_cb=None, enable_caption=False)
         # Rebuild temp video from keyframes
         # -----------------------------------
         await emit("Rebuilding video from keyframes", 35, data)
+        # video_path = make_video_from_keyframe_paths(
+        #     keyframe_paths=keyframes,
+        #     fps=60
+        # )
         video_path = make_video_from_keyframe_paths(
-            keyframe_paths=keyframes,
-            fps=60
-        )
+    keyframe_paths=keyframes,
+    fps=60
+)
 
         # -----------------------------------
         # OCR
         # -----------------------------------
         await emit("Running OCR on video", 45, data)
-        textInVideo = run_ocr_on_video(video_path)
+        # textInVideo = run_ocr_on_video(video_path)
+        textInVideo = await asyncio.to_thread(
+    run_ocr_on_video,
+    video_path,
+)
         textSeg = analyze_text(textInVideo)
 
         data["text"] = textInVideo
@@ -265,7 +254,11 @@ async def run_video_pipeline(video_path, progress_cb=None, enable_caption=False)
         # Object Detection (separated step)
         # -----------------------------------
         await emit("Detecting objects in video", 55, data)
-        objectsInVideo = detect_objects_in_video(video_path)
+        # objectsInVideo = detect_objects_in_video(video_path)
+        objectsInVideo = await asyncio.to_thread(
+    detect_objects_in_video,
+    video_path,
+)
         data["objects"] = objectsInVideo
 
         # -----------------------------------
@@ -274,7 +267,8 @@ async def run_video_pipeline(video_path, progress_cb=None, enable_caption=False)
         caption = ""
         await emit("Generating video caption", 70, data)
         if enable_caption:
-            caption = generate_caption(collage_path)
+            # caption = generate_caption(collage_path)
+            caption = await asyncio.to_thread( generate_caption,collage_path,)
         data["caption"] = caption
 
 
@@ -284,7 +278,11 @@ async def run_video_pipeline(video_path, progress_cb=None, enable_caption=False)
         await emit("Final sensitivity classification", 90, data)
 
         merged_text = f"{textInVideo}\n{objectsInVideo}\n{caption}"
-        classification = classify(merged_text)
+        # classification = classify(merged_text)
+        classification = await asyncio.to_thread(
+    classify,
+    merged_text,
+)
 
         data["sequence"] = merged_text
         data["labels"] = classification["labels"]
@@ -294,83 +292,30 @@ async def run_video_pipeline(video_path, progress_cb=None, enable_caption=False)
 
         return data
 
-# async def run_video_pipeline(video_path, progress_cb=None):
 
-#     async def emit(step: str, percent: int, data=None):
-#         if progress_cb:
-#             await progress_cb(step, percent, data)
 
-#     data = {
-#         "sequence": None,
-#         "caption": None,
-#         "text": None,
-#         "objects": None,
-#         "labels": None,
-#         "scores": None,
-#         "textSeg": None,
-#         "caption_image": None,
-#     }
 
-#     with tempfile.TemporaryDirectory() as tmp:
 
-#         # -----------------------------------
-#         # Extract keyframes
-#         # -----------------------------------
-#         await emit("Extracting keyframes", 10, data)
-#         keyframes = extract_keyframes(video_path, tmp)
 
-#         # -----------------------------------
-#         # Build collage
-#         # -----------------------------------
-#         await emit("Building context collage", 30, data)
-#         collage_path = build_collage(keyframes, os.path.join(tmp, "context.jpg"))
-#         collage_base64 = image_to_base64(collage_path)
 
-#         data["caption_image"] = collage_base64
 
-#         # -----------------------------------
-#         # Rebuild temp video from keyframes
-#         # -----------------------------------
-#         video_path = make_video_from_keyframe_paths(
-#             keyframe_paths=keyframes,
-#             fps=60
-#         )
 
-#         textInVideo = "no text extracted from video"
-#         textInVideo=run_ocr_on_video(video_path)
-#         objectsInVideo = detect_objects_in_video(video_path)
-#         textSeg = analyze_text(textInVideo)
 
-#         data["text"] = textInVideo
-#         data["objects"] = objectsInVideo
-#         data["textSeg"] = convert_text_segments(textSeg)
 
-#         await emit("Video analysis completed", 45, data)
 
-#         # -----------------------------------
-#         # Caption
-#         # -----------------------------------
-#         await emit("Generating video caption", 60, data)
-#         caption = "Placeholder caption image"
-#         caption = generate_caption(collage_path)
 
-#         data["caption"] = caption
 
-#         # -----------------------------------
-#         # Classification
-#         # -----------------------------------
-#         await emit("Final sensitivity classification", 90, data)
 
-#         merged_text = f"{textInVideo}\n{objectsInVideo}\n{caption}"
-#         classification = classify(merged_text)
 
-#         data["sequence"] = merged_text
-#         data["labels"] = classification["labels"]
-#         data["scores"] = classification["scores"]
 
-#         await emit("Completed", 100, data)
 
-#         return data
+
+
+
+
+
+
+
 
 
 
