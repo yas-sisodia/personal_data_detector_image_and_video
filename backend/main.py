@@ -5,6 +5,25 @@
 # tailscale funnel 8000
 
 
+# tailscale funnel reset
+
+# tailscale serve --bg --set-path /api http://127.0.0.1:8000
+# tailscale serve --bg --set-path /streamlit http://127.0.0.1:8501
+
+# tailscale funnel on
+
+#   tailscale serve --https=443 off
+
+# tailscale serve --bg --https=8443 http://127.0.0.1:8501
+# tailscale funnel 8443 on
+
+# https://yas.tail538282.ts.net:8443
+
+# tailscale serve status
+
+
+
+
 from fastapi import FastAPI, WebSocket, UploadFile
 import shutil
 import uuid
